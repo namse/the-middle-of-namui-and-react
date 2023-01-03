@@ -12,6 +12,7 @@ fn sync_tree_to_platform(tree: &TreeNode) {
     match tree {
         TreeNode::Component {
             component: _,
+            props: _,
             children,
         } => {
             for child in children {

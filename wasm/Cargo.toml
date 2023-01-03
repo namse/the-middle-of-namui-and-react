@@ -25,6 +25,7 @@ lto = true
 # to interact with JavaScript.
 wasm-bindgen = "0.2.45"
 namsex-core = { path = "../namsex-core" }
+wasm-bindgen-futures = "0.4"
 
 # `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
 # compared to the default allocator's ~10K. However, it is slower than the default
@@ -56,4 +57,3 @@ console_error_panic_hook = "0.1.5"
 wasm-bindgen-test = "0.2.45"
 futures = "0.1.27"
 js-sys = "0.3.22"
-wasm-bindgen-futures = "0.3.22"

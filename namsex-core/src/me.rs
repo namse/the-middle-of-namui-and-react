@@ -41,7 +41,7 @@ impl Me {
                     Box::new(|props| {
                         let props = props.downcast_ref::<MeProps>().unwrap();
                         let component: Me = Component::create(props);
-                        Box::new(component)
+                        ComponentWrapper::new(Box::new(component))
                     }),
                 );
             }
@@ -61,5 +61,9 @@ impl InternalComponent for Me {
 
     fn update(&mut self, event: Box<dyn Any>) {
         Component::update(self, *event.downcast::<MeEvent>().unwrap())
+    }
+
+    fn component_type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
     }
 }

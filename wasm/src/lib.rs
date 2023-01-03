@@ -1,6 +1,7 @@
 use namsex_core::*;
 use std::collections::VecDeque;
 use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
@@ -22,16 +23,20 @@ pub fn main_js() -> Result<(), JsValue> {
     // Your code goes here!
     console::log_1(&JsValue::from_str("Hello world!"));
 
-    main();
+    spawn_local(async move {
+        main().await;
+    });
+
     Ok(())
 }
 
-fn main() {
+async fn main() {
     run::<MyRoot, _>(
         MyRootProps {},
         |str| console::log_1(&JsValue::from_str(str)),
         sync_tree_to_platform,
-    );
+    )
+    .await;
 }
 
 fn sync_tree_to_platform(tree: &TreeNode) {
@@ -48,6 +53,7 @@ fn sync_tree_to_platform(tree: &TreeNode) {
         match node {
             TreeNode::Component {
                 component: _,
+                props: _,
                 children,
             } => {
                 for child in children {
@@ -69,10 +75,14 @@ fn sync_tree_to_platform(tree: &TreeNode) {
                         .dyn_into::<web_sys::HtmlButtonElement>()
                         .unwrap();
 
+                    let node_id = button.id;
+
                     button_element.set_text_content(Some(&button.text));
                     button_element.set_onclick(Some(
                         Closure::wrap(Box::new(move || {
                             console::log_1(&JsValue::from_str("Button clicked!"));
+
+                            namsex_core::event::send(node_id, ButtonEvent::Click)
                         }) as Box<dyn FnMut()>)
                         .into_js_value()
                         .unchecked_ref(),
