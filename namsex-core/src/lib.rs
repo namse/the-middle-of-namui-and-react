@@ -1,32 +1,49 @@
+mod button;
 mod me;
 mod me1;
 mod text;
 
-use me::*;
-use me1::*;
-use once_cell::sync::Lazy;
-use std::{any::Any, collections::HashMap, fmt::Debug, sync::Mutex};
-use text::*;
+pub use button::*;
+pub use me::*;
+pub use me1::*;
+pub use once_cell::sync::Lazy;
+pub use std::{any::Any, collections::HashMap, fmt::Debug, sync::Mutex};
+pub use text::*;
 
-fn main() {
-    run::<MyRoot, _>(MyRootProps {});
+static LOG_FN: once_cell::sync::OnceCell<Mutex<Box<dyn Fn(&str) + Send + Sync>>> =
+    once_cell::sync::OnceCell::new();
+
+fn log(msg: &str) {
+    (LOG_FN.get().unwrap().lock().unwrap())(msg);
 }
 
-fn run<Root: Component<Props = Props> + 'static, Props: Any>(props: Props) {
+macro_rules! log {
+    ($($arg:tt)*) => (log(&format!($($arg)*)));
+}
+
+pub fn run<Root: Component<Props = Props> + 'static, Props: Any>(
+    props: Props,
+    log_fn: impl Fn(&str) + Send + Sync + 'static,
+    sync_tree_to_platform: impl Fn(&TreeNode),
+) {
+    LOG_FN.get_or_init(|| Mutex::new(Box::new(log_fn)));
+
     let root_component = Root::create(&props);
     let tree = resolve_tree(Box::new(root_component), &props);
 
-    println!("{:#?}", tree);
+    log!("{:#?}", tree);
+
+    (sync_tree_to_platform)(&tree);
 }
 
 #[derive(Debug)]
-enum TreeNode {
+pub enum TreeNode {
     Component {
         component: Box<dyn InternalComponent>,
         children: Vec<TreeNode>,
     },
-    EndNode {
-        rendering_node: RenderingNode,
+    PlatformNode {
+        platform_node: PlatformNode,
     },
 }
 
@@ -45,7 +62,9 @@ fn resolve_tree(mut component: Box<dyn InternalComponent>, props: &dyn Any) -> T
                 children: vec![child_tree_node],
             }
         }
-        RenderingTree::Node(rendering_node) => TreeNode::EndNode { rendering_node },
+        RenderingTree::Node(platform_node) => TreeNode::PlatformNode {
+            platform_node: platform_node,
+        },
     }
 }
 
@@ -64,12 +83,12 @@ type GeneratorMap =
     HashMap<std::any::TypeId, Box<dyn Fn(&dyn Any) -> Box<dyn InternalComponent> + Send + Sync>>;
 static COMPONENT_GENERATORS: Lazy<Mutex<GeneratorMap>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-trait InternalComponent: Debug {
+pub trait InternalComponent: Debug {
     fn render(&mut self, props: &dyn Any) -> RenderingTree;
     fn update(&mut self, event: Box<dyn Any>);
 }
 
-trait Component: InternalComponent {
+pub trait Component: InternalComponent {
     type Props: Any;
     type Event: Any;
     fn create(props: &Self::Props) -> Self;
@@ -78,13 +97,13 @@ trait Component: InternalComponent {
 }
 
 #[derive(Debug)]
-struct MyRoot {
+pub struct MyRoot {
     x: i32,
 }
 
-struct MyRootProps {}
+pub struct MyRootProps {}
 
-enum MyRootEvent {
+pub enum MyRootEvent {
     OnClick,
 }
 
@@ -102,7 +121,7 @@ impl Component for MyRoot {
 
     fn update(&mut self, event: Self::Event) {
         match event {
-            MyRootEvent::OnClick => println!("Clicked!"),
+            MyRootEvent::OnClick => log!("Clicked!"),
         }
     }
 }
@@ -119,7 +138,7 @@ impl InternalComponent for MyRoot {
 
 #[derive(Debug)]
 pub enum RenderingTree {
-    Node(RenderingNode),
+    Node(PlatformNode),
     ComponentBlueprint {
         component_type_id: std::any::TypeId,
         props: Box<dyn Any>,
@@ -129,7 +148,7 @@ pub enum RenderingTree {
 // impl RenderingTree {}
 
 #[derive(Debug)]
-pub enum RenderingNode {
-    // Button(Button),
+pub enum PlatformNode {
+    Button(Button),
     Text(Text),
 }

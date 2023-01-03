@@ -20,12 +20,19 @@ impl Component for Me1 {
     }
 
     fn render(&mut self, props: &Self::Props) -> RenderingTree {
-        Text::render("Hello world!")
+        println!("Me1::render x={}", self.x);
+        Button::render("I am button!", |event| {
+            println!("Button clicked! {:?}", event);
+            Some(Me1Event::OnClick)
+        })
     }
 
     fn update(&mut self, event: Self::Event) {
         match event {
-            Me1Event::OnClick => println!("Clicked!"),
+            Me1Event::OnClick => {
+                println!("Me1Event::OnClick event!");
+                self.x += 1;
+            }
         }
     }
 }
