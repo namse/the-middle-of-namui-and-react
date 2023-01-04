@@ -11,6 +11,8 @@ pub enum TreeNode {
     },
     PlatformNode {
         platform_node: PlatformNode,
+        prev_platform_node: Option<PlatformNode>,
+        rendered_real_dom: Option<Box<dyn Any>>,
     },
 }
 
@@ -29,7 +31,11 @@ impl TreeNode {
                 }
                 None
             }
-            TreeNode::PlatformNode { platform_node } => {
+            TreeNode::PlatformNode {
+                platform_node,
+                rendered_real_dom: _,
+                prev_platform_node: _,
+            } => {
                 if platform_node.id() == node_id {
                     Some(platform_node)
                 } else {
@@ -60,11 +66,9 @@ impl TreeNode {
                     let component_id = component.id;
                     component_id == owner_id
                 }
-                TreeNode::PlatformNode { platform_node: _ } => false,
+                TreeNode::PlatformNode { .. } => false,
             }
         };
-
-        crate::log!("is_me_owner: {}", is_me_owner);
 
         if is_me_owner {
             Ok(callback(self))
@@ -99,9 +103,7 @@ impl TreeNode {
                         children: new_children.into(),
                     })
                 }
-                TreeNode::PlatformNode { platform_node } => {
-                    Result::Err(TreeNode::PlatformNode { platform_node })
-                }
+                TreeNode::PlatformNode { .. } => Result::Err(self),
             }
         }
     }
@@ -131,7 +133,7 @@ impl TreeNode {
                     false
                 }
             }
-            TreeNode::PlatformNode { platform_node: _ } => false,
+            TreeNode::PlatformNode { .. } => false,
         }
     }
 }

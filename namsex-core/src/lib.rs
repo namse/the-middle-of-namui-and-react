@@ -32,18 +32,18 @@ use uuid::Uuid;
 pub async fn run<Root: Component<Props = Props> + 'static, Props: Any>(
     props: Props,
     log_fn: impl Fn(&str) + Send + Sync + 'static,
-    sync_tree_to_platform: impl Fn(&TreeNode),
+    sync_tree_to_platform: impl Fn(&mut TreeNode),
 ) {
     let mut event_receiver = event::init();
     LOG_FN.get_or_init(|| Mutex::new(Box::new(log_fn)));
 
     let root_component = ComponentWrapper::new(Box::new(Root::create(&props)));
-    let mut tree_node = resolve_tree(root_component, Box::new(props));
+    let mut tree_node = reconciliation(root_component, Box::new(props), None, true);
 
     loop {
-        log!("{:#?}", tree_node);
-        (sync_tree_to_platform)(&tree_node);
+        (sync_tree_to_platform)(&mut tree_node);
 
+        log!("{:#?}", tree_node);
         let event = event_receiver.recv().await.unwrap();
 
         tree_node = handle_event(event, tree_node);
@@ -65,12 +65,12 @@ fn handle_event(event: event::Event, mut tree_node: TreeNode) -> TreeNode {
             };
 
             tree_node = tree_node
-                .edit_owner_of_platform_node(node_id, |owner| {
-                    let TreeNode::Component { mut component, props, children: _ } = owner else {
-                    unreachable!("owner of platform node must be a component");
-                };
+                .edit_owner_of_platform_node(node_id, |mut owner| {
+                    let TreeNode::Component { component, .. } = &mut owner else {
+                        unreachable!("owner of platform node must be a component");
+                    };
                     component.internal.update(event_for_owner);
-                    resolve_tree(component, props)
+                    top_reconciliation(owner)
                 })
                 .unwrap();
         }
@@ -78,21 +78,66 @@ fn handle_event(event: event::Event, mut tree_node: TreeNode) -> TreeNode {
     tree_node
 }
 
-fn resolve_tree(mut component: ComponentWrapper, props: Box<dyn Any>) -> TreeNode {
+fn should_keep_to_prev_tree_node(
+    component: &ComponentWrapper,
+    props: &Box<dyn Any>,
+    prev_tree_node: &Option<TreeNode>,
+    force_render: bool,
+) -> bool {
+    if force_render {
+        return false;
+    }
+
+    let Some(prev_tree_node) = &prev_tree_node else {
+        return false;
+    };
+
+    let TreeNode::Component {
+        component: prev_component,
+        props: prev_props,
+        children: _,
+    } = &prev_tree_node else {
+        return false;
+    };
+
+    prev_component.component_type_id() == component.component_type_id()
+        && boxed_props_eq(&prev_props, &props)
+}
+
+fn top_reconciliation(tree_node: TreeNode) -> TreeNode {
+    let TreeNode::Component { mut component, props, mut children } = tree_node else {
+        unreachable!("owner of platform node must be a component");
+    };
+
     let rendering_tree = component.render(props.as_ref());
+    let prev_child_tree_node = children.pop_front();
+
     let child = match rendering_tree {
         RenderingTree::ComponentBlueprint {
             component_type_id,
             props,
         } => {
             let child_component = create_component(component_type_id, props.as_ref());
-            resolve_tree(child_component, props)
+            reconciliation(child_component, props, prev_child_tree_node, false)
         }
-        RenderingTree::Node(platform_node) => TreeNode::PlatformNode { platform_node },
+        RenderingTree::Node(platform_node) => match prev_child_tree_node {
+            Some(TreeNode::PlatformNode {
+                platform_node: prev_platform_node,
+                prev_platform_node: _,
+                rendered_real_dom,
+            }) => TreeNode::PlatformNode {
+                platform_node,
+                prev_platform_node: Some(prev_platform_node),
+                rendered_real_dom,
+            },
+            _ => TreeNode::PlatformNode {
+                platform_node,
+                prev_platform_node: None,
+                rendered_real_dom: None,
+            },
+        },
     };
 
-    let address = &component as *const _ as usize;
-    log!("rendering &component address after: {:#?}", address);
     TreeNode::Component {
         component,
         props,
@@ -100,8 +145,68 @@ fn resolve_tree(mut component: ComponentWrapper, props: Box<dyn Any>) -> TreeNod
     }
 }
 
+fn reconciliation(
+    mut component: ComponentWrapper,
+    props: Box<dyn Any>,
+    prev_tree_node: Option<TreeNode>,
+    force_render: bool,
+) -> TreeNode {
+    if should_keep_to_prev_tree_node(&component, &props, &prev_tree_node, force_render) {
+        return prev_tree_node.unwrap();
+    }
+
+    let rendering_tree = component.render(props.as_ref());
+    let prev_child_tree_node = prev_tree_node.and_then(get_child_tree_node);
+
+    let child = match rendering_tree {
+        RenderingTree::ComponentBlueprint {
+            component_type_id,
+            props,
+        } => {
+            let child_component = create_component(component_type_id, props.as_ref());
+            reconciliation(child_component, props, prev_child_tree_node, false)
+        }
+        RenderingTree::Node(platform_node) => match prev_child_tree_node {
+            Some(TreeNode::PlatformNode {
+                platform_node: prev_platform_node,
+                prev_platform_node: _,
+                rendered_real_dom,
+            }) => TreeNode::PlatformNode {
+                platform_node,
+                prev_platform_node: Some(prev_platform_node),
+                rendered_real_dom,
+            },
+            _ => TreeNode::PlatformNode {
+                platform_node,
+                prev_platform_node: None,
+                rendered_real_dom: None,
+            },
+        },
+    };
+
+    TreeNode::Component {
+        component,
+        props,
+        children: vec![child].into(),
+    }
+}
+
+fn get_child_tree_node(tree_node: TreeNode) -> Option<TreeNode> {
+    log!("hi");
+    log!("get_child_tree_node: {:#?}", tree_node);
+    let TreeNode::Component {
+            component: _,
+            props: _,
+            mut children,
+        } = tree_node else {
+            return None
+        };
+
+    children.pop_front()
+}
+
 fn create_component(component_type_id: std::any::TypeId, props: &dyn Any) -> ComponentWrapper {
-    COMPONENT_GENERATORS
+    COMPONENT_GENERATOR_MAP
         .lock()
         .unwrap()
         .get(&component_type_id)
@@ -110,7 +215,10 @@ fn create_component(component_type_id: std::any::TypeId, props: &dyn Any) -> Com
 
 type GeneratorMap =
     HashMap<std::any::TypeId, Box<dyn Fn(&dyn Any) -> ComponentWrapper + Send + Sync>>;
-static COMPONENT_GENERATORS: Lazy<Mutex<GeneratorMap>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static COMPONENT_GENERATOR_MAP: Lazy<Mutex<GeneratorMap>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+type PropsEqMap = HashMap<std::any::TypeId, Box<dyn Fn(&dyn Any, &dyn Any) -> bool + Send + Sync>>;
+static PROPS_EQ_MAP: Lazy<Mutex<PropsEqMap>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub trait InternalComponent: Debug {
     fn render(&mut self, props: &dyn Any) -> RenderingTree;
@@ -139,6 +247,9 @@ impl ComponentWrapper {
             .unwrap() = id;
 
         self.internal.render(props)
+    }
+    pub(crate) fn component_type_id(&self) -> std::any::TypeId {
+        self.internal.component_type_id()
     }
 }
 
@@ -201,4 +312,9 @@ pub enum RenderingTree {
         component_type_id: std::any::TypeId,
         props: Box<dyn Any>,
     },
+}
+
+fn boxed_props_eq(a: &Box<dyn Any>, b: &Box<dyn Any>) -> bool {
+    a.type_id() == b.type_id()
+        && PROPS_EQ_MAP.lock().unwrap().get(&a.type_id()).unwrap()(a.as_ref(), b.as_ref())
 }

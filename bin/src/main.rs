@@ -8,7 +8,7 @@ fn main() {
     );
 }
 
-fn sync_tree_to_platform(tree: &TreeNode) {
+fn sync_tree_to_platform(tree: &mut TreeNode) {
     match tree {
         TreeNode::Component {
             component: _,
@@ -19,7 +19,7 @@ fn sync_tree_to_platform(tree: &TreeNode) {
                 sync_tree_to_platform(child);
             }
         }
-        TreeNode::PlatformNode { platform_node } => match platform_node {
+        TreeNode::PlatformNode { platform_node, .. } => match platform_node {
             PlatformNode::Button(button) => {
                 println!("Attach button node: {:?}", button);
             }

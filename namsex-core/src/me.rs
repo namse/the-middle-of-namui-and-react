@@ -5,6 +5,7 @@ pub struct Me {
     pub x: i32,
 }
 
+#[derive(PartialEq)]
 pub struct MeProps {}
 
 pub enum MeEvent {
@@ -34,7 +35,7 @@ impl Me {
     pub fn render(props: MeProps) -> RenderingTree {
         let component_type_id = std::any::TypeId::of::<Self>();
         {
-            let mut generators = COMPONENT_GENERATORS.lock().unwrap();
+            let mut generators = COMPONENT_GENERATOR_MAP.lock().unwrap();
             if !generators.contains_key(&component_type_id) {
                 generators.insert(
                     component_type_id,
@@ -42,6 +43,23 @@ impl Me {
                         let props = props.downcast_ref::<MeProps>().unwrap();
                         let component: Me = Component::create(props);
                         ComponentWrapper::new(Box::new(component))
+                    }),
+                );
+            }
+        }
+        {
+            let mut props_eq_map = PROPS_EQ_MAP.lock().unwrap();
+            if !props_eq_map.contains_key(&component_type_id) {
+                props_eq_map.insert(
+                    component_type_id,
+                    Box::new(|a, b| {
+                        let Some(a) = a.downcast_ref::<MeProps>() else {
+                            return false;
+                        };
+                        let Some(b) = b.downcast_ref::<MeProps>() else {
+                            return false;
+                        };
+                        a == b
                     }),
                 );
             }

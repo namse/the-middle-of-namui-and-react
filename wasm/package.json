@@ -3,8 +3,8 @@
   "name": "rust-webpack-template",
   "version": "0.1.0",
   "scripts": {
-    "build": "NODE_OPTIONS=--openssl-legacy-provider rimraf dist pkg && webpack",
-    "start": "NODE_OPTIONS=--openssl-legacy-provider rimraf dist pkg && webpack-dev-server --open -d",
+    "build": "rimraf dist pkg && NODE_OPTIONS=--openssl-legacy-provider webpack",
+    "start": "rimraf dist pkg && NODE_OPTIONS=--openssl-legacy-provider webpack-dev-server --open -d",
     "test": "cargo test && wasm-pack test --headless"
   },
   "devDependencies": {

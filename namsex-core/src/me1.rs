@@ -5,6 +5,7 @@ pub struct Me1 {
     pub x: i32,
 }
 
+#[derive(PartialEq)]
 pub struct Me1Props {}
 
 pub enum Me1Event {
@@ -21,7 +22,7 @@ impl Component for Me1 {
 
     fn render(&mut self, props: &Self::Props) -> RenderingTree {
         println!("Me1::render x={}", self.x);
-        Button::render("I am button!", |event| {
+        Button::render(format!("I am button! {}", self.x), |event| {
             println!("Button clicked! {:?}", event);
             Some(Me1Event::OnClick)
         })
@@ -41,7 +42,7 @@ impl Me1 {
     pub fn render(props: Me1Props) -> RenderingTree {
         let component_type_id = std::any::TypeId::of::<Self>();
         {
-            let mut generators = COMPONENT_GENERATORS.lock().unwrap();
+            let mut generators = COMPONENT_GENERATOR_MAP.lock().unwrap();
             if !generators.contains_key(&component_type_id) {
                 generators.insert(
                     component_type_id,
@@ -49,6 +50,23 @@ impl Me1 {
                         let component: Me1 =
                             Component::create(props.downcast_ref::<Me1Props>().unwrap());
                         ComponentWrapper::new(Box::new(component))
+                    }),
+                );
+            }
+        }
+        {
+            let mut props_eq_map = PROPS_EQ_MAP.lock().unwrap();
+            if !props_eq_map.contains_key(&component_type_id) {
+                props_eq_map.insert(
+                    component_type_id,
+                    Box::new(|a, b| {
+                        let Some(a) = a.downcast_ref::<Me1Props>() else {
+                            return false;
+                        };
+                        let Some(b) = b.downcast_ref::<Me1Props>() else {
+                            return false;
+                        };
+                        a == b
                     }),
                 );
             }

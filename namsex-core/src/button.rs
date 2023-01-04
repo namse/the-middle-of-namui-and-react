@@ -23,6 +23,7 @@ impl Button {
         text: impl AsRef<str>,
         on_click: impl Fn(ButtonClickEvent) -> Option<YourEvent> + 'static,
     ) -> RenderingTree {
+        println!("Button::render");
         let node_id = Uuid::new_v4();
         {
             let owner_id: Uuid = RENDERING_COMPONENT_ID
@@ -32,7 +33,6 @@ impl Button {
                 .unwrap()
                 .clone();
 
-            crate::log!("owner_id: {}", owner_id);
             PLATFORM_NODE_OWNER_ID_MAP
                 .lock()
                 .unwrap()
