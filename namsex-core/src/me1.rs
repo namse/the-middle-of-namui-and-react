@@ -6,7 +6,10 @@ pub struct Me1 {
 }
 
 #[derive(PartialEq)]
-pub struct Me1Props {}
+pub struct Me1Props {
+    pub on_button_click: EventHandler,
+    pub value: i32,
+}
 
 pub enum Me1Event {
     OnClick,
@@ -21,14 +24,16 @@ impl Component for Me1 {
     }
 
     fn render(&mut self, props: &Self::Props) -> RenderingTree {
-        println!("Me1::render x={}", self.x);
-        Button::render(format!("I am button! {}", self.x), |event| {
-            println!("Button clicked! {:?}", event);
-            Some(Me1Event::OnClick)
-        })
+        Button::render(
+            format!(
+                "I am button! self.x: {}, props.value: {}",
+                self.x, props.value
+            ),
+            &props.on_button_click,
+        )
     }
 
-    fn update(&mut self, event: Self::Event) {
+    fn update(&mut self, event: &Self::Event) {
         match event {
             Me1Event::OnClick => {
                 println!("Me1Event::OnClick event!");
@@ -47,8 +52,8 @@ impl Me1 {
                 generators.insert(
                     component_type_id,
                     Box::new(|props| {
-                        let component: Me1 =
-                            Component::create(props.downcast_ref::<Me1Props>().unwrap());
+                        let props = props.downcast_ref::<Me1Props>().unwrap();
+                        let component: Me1 = Component::create(props);
                         ComponentWrapper::new(Box::new(component))
                     }),
                 );
@@ -84,8 +89,8 @@ impl InternalComponent for Me1 {
         Component::render(self, props.downcast_ref::<Me1Props>().unwrap())
     }
 
-    fn update(&mut self, event: Box<dyn Any>) {
-        Component::update(self, *event.downcast::<Me1Event>().unwrap())
+    fn update(&mut self, event: &dyn Any) {
+        Component::update(self, event.downcast_ref::<Me1Event>().unwrap())
     }
 
     fn component_type_id(&self) -> std::any::TypeId {

@@ -4,7 +4,7 @@ use uuid::Uuid;
 pub struct Button {
     pub id: Uuid,
     pub text: String,
-    pub on_click_callback: OnClickCallback,
+    pub on_click: EventHandler,
 }
 
 impl std::fmt::Debug for Button {
@@ -16,13 +16,8 @@ impl std::fmt::Debug for Button {
     }
 }
 
-type OnClickCallback = Box<dyn Fn(ButtonClickEvent) -> Option<Box<dyn Any>>>;
-
 impl Button {
-    pub fn render<YourEvent: Any>(
-        text: impl AsRef<str>,
-        on_click: impl Fn(ButtonClickEvent) -> Option<YourEvent> + 'static,
-    ) -> RenderingTree {
+    pub fn render(text: impl AsRef<str>, on_click: &EventHandler) -> RenderingTree {
         println!("Button::render");
         let node_id = Uuid::new_v4();
         {
@@ -42,19 +37,17 @@ impl Button {
         RenderingTree::Node(PlatformNode::Button(Button {
             id: node_id,
             text: text.as_ref().to_string(),
-            on_click_callback: Box::new(move |event: ButtonClickEvent| {
-                on_click(event).map(|event| Box::new(event) as Box<dyn Any>)
-            }),
+            on_click: on_click.clone(),
         }))
     }
-    pub fn on_event(&mut self, event: ButtonEvent) -> Option<Box<dyn Any>> {
+    pub fn on_event(&mut self, event: ButtonEvent) -> Option<EventHandler> {
         match event {
-            ButtonEvent::Click => (self.on_click_callback)(ButtonClickEvent {}),
+            ButtonEvent::Click => Some(self.on_click.clone()),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ButtonClickEvent {}
 
 #[derive(Debug)]

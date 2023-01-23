@@ -27,6 +27,7 @@ macro_rules! log {
 }
 
 pub(crate) use log;
+use std::{any::TypeId, sync::Arc};
 use uuid::Uuid;
 
 pub async fn run<Root: Component<Props = Props> + 'static, Props: Any>(
@@ -60,16 +61,16 @@ fn handle_event(event: event::Event, mut tree_node: TreeNode) -> TreeNode {
                 return tree_node;
             };
 
-            let Some(event_for_owner) = platform_node.on_event(event) else {
+            let Some(event_to) = platform_node.on_event(event) else {
                 return tree_node;
             };
 
             tree_node = tree_node
-                .edit_owner_of_platform_node(node_id, |mut owner| {
+                .edit_component_node(event_to.instance_id, move |mut owner| {
                     let TreeNode::Component { component, .. } = &mut owner else {
                         unreachable!("owner of platform node must be a component");
                     };
-                    component.internal.update(event_for_owner);
+                    component.internal.update(event_to.event.as_ref());
                     top_reconciliation(owner)
                 })
                 .unwrap();
@@ -100,8 +101,10 @@ fn should_keep_to_prev_tree_node(
         return false;
     };
 
-    prev_component.component_type_id() == component.component_type_id()
-        && boxed_props_eq(&prev_props, &props)
+    let component_type_id = component.component_type_id();
+
+    component_type_id == prev_component.component_type_id()
+        && boxed_props_eq(component_type_id, &prev_props, &props)
 }
 
 fn top_reconciliation(tree_node: TreeNode) -> TreeNode {
@@ -222,7 +225,7 @@ static PROPS_EQ_MAP: Lazy<Mutex<PropsEqMap>> = Lazy::new(|| Mutex::new(HashMap::
 
 pub trait InternalComponent: Debug {
     fn render(&mut self, props: &dyn Any) -> RenderingTree;
-    fn update(&mut self, event: Box<dyn Any>);
+    fn update(&mut self, event: &dyn Any);
     fn component_type_id(&self) -> std::any::TypeId;
 }
 
@@ -253,12 +256,31 @@ impl ComponentWrapper {
     }
 }
 
+#[derive(Clone)]
+pub struct EventHandler {
+    instance_id: Uuid,
+    event: Arc<dyn Any>,
+}
+
+impl PartialEq for EventHandler {
+    fn eq(&self, other: &Self) -> bool {
+        self.instance_id == other.instance_id && Arc::ptr_eq(&self.event, &other.event)
+    }
+}
+
 pub trait Component: InternalComponent {
     type Props: Any;
     type Event: Any;
     fn create(props: &Self::Props) -> Self;
     fn render(&mut self, props: &Self::Props) -> RenderingTree;
-    fn update(&mut self, event: Self::Event);
+    fn update(&mut self, event: &Self::Event);
+    fn event_handler(&self, event: impl Any) -> EventHandler {
+        let rendering_component_id = *RENDERING_COMPONENT_ID.get().unwrap().lock().unwrap();
+        EventHandler {
+            instance_id: rendering_component_id,
+            event: Arc::new(event),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -284,7 +306,7 @@ impl Component for MyRoot {
         Me::render(MeProps {})
     }
 
-    fn update(&mut self, event: Self::Event) {
+    fn update(&mut self, event: &Self::Event) {
         match event {
             MyRootEvent::OnClick => log!("Clicked!"),
         }
@@ -296,8 +318,8 @@ impl InternalComponent for MyRoot {
         Component::render(self, props.downcast_ref::<MyRootProps>().unwrap())
     }
 
-    fn update(&mut self, event: Box<dyn Any>) {
-        Component::update(self, *event.downcast::<MyRootEvent>().unwrap())
+    fn update(&mut self, event: &dyn Any) {
+        Component::update(self, event.downcast_ref::<MyRootEvent>().unwrap())
     }
 
     fn component_type_id(&self) -> std::any::TypeId {
@@ -314,7 +336,15 @@ pub enum RenderingTree {
     },
 }
 
-fn boxed_props_eq(a: &Box<dyn Any>, b: &Box<dyn Any>) -> bool {
-    a.type_id() == b.type_id()
-        && PROPS_EQ_MAP.lock().unwrap().get(&a.type_id()).unwrap()(a.as_ref(), b.as_ref())
+fn boxed_props_eq(
+    component_type_id: TypeId,
+    props_a: &Box<dyn Any>,
+    props_b: &Box<dyn Any>,
+) -> bool {
+    props_a.type_id() == props_b.type_id()
+        && PROPS_EQ_MAP
+            .lock()
+            .unwrap()
+            .get(&component_type_id)
+            .unwrap()(props_a.as_ref(), props_b.as_ref())
 }

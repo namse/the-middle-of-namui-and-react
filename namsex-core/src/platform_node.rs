@@ -7,7 +7,7 @@ pub enum PlatformNode {
     Text(Text),
 }
 impl PlatformNode {
-    pub(crate) fn on_event(&mut self, event: event::Event) -> Option<Box<dyn Any>> {
+    pub(crate) fn on_event(&mut self, event: event::Event) -> Option<EventHandler> {
         match self {
             PlatformNode::Button(button) => button.on_event(event.downcast().unwrap()),
             PlatformNode::Text(text) => unreachable!(),
