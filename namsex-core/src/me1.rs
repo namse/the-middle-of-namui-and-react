@@ -7,7 +7,7 @@ pub struct Me1 {
 
 #[derive(PartialEq)]
 pub struct Me1Props {
-    pub on_button_click: EventTo,
+    pub on_button_click: EventHandler,
     pub value: i32,
 }
 

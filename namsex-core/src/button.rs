@@ -4,7 +4,7 @@ use uuid::Uuid;
 pub struct Button {
     pub id: Uuid,
     pub text: String,
-    pub on_click: EventTo,
+    pub on_click: EventHandler,
 }
 
 impl std::fmt::Debug for Button {
@@ -17,7 +17,7 @@ impl std::fmt::Debug for Button {
 }
 
 impl Button {
-    pub fn render(text: impl AsRef<str>, on_click: &EventTo) -> RenderingTree {
+    pub fn render(text: impl AsRef<str>, on_click: &EventHandler) -> RenderingTree {
         println!("Button::render");
         let node_id = Uuid::new_v4();
         {
@@ -40,7 +40,7 @@ impl Button {
             on_click: on_click.clone(),
         }))
     }
-    pub fn on_event(&mut self, event: ButtonEvent) -> Option<EventTo> {
+    pub fn on_event(&mut self, event: ButtonEvent) -> Option<EventHandler> {
         match event {
             ButtonEvent::Click => Some(self.on_click.clone()),
         }

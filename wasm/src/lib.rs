@@ -98,6 +98,8 @@ fn sync_tree_to_platform(tree: &mut TreeNode) {
 }
 
 fn update_button(button: &Button, prev_button: &Button, rendered_real_dom: &HtmlElement) {
+    console::log_1(&JsValue::from_str("update_button"));
+
     let mut casted_real_dom = None;
 
     let mut get_casted_real_dom = || {

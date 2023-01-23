@@ -257,12 +257,12 @@ impl ComponentWrapper {
 }
 
 #[derive(Clone)]
-pub struct EventTo {
+pub struct EventHandler {
     instance_id: Uuid,
     event: Arc<dyn Any>,
 }
 
-impl PartialEq for EventTo {
+impl PartialEq for EventHandler {
     fn eq(&self, other: &Self) -> bool {
         self.instance_id == other.instance_id && Arc::ptr_eq(&self.event, &other.event)
     }
@@ -274,9 +274,9 @@ pub trait Component: InternalComponent {
     fn create(props: &Self::Props) -> Self;
     fn render(&mut self, props: &Self::Props) -> RenderingTree;
     fn update(&mut self, event: &Self::Event);
-    fn event_handler(&self, event: impl Any) -> EventTo {
+    fn event_handler(&self, event: impl Any) -> EventHandler {
         let rendering_component_id = *RENDERING_COMPONENT_ID.get().unwrap().lock().unwrap();
-        EventTo {
+        EventHandler {
             instance_id: rendering_component_id,
             event: Arc::new(event),
         }
