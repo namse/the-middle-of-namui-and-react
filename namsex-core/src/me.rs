@@ -21,12 +21,18 @@ impl Component for Me {
     }
 
     fn render(&mut self, props: &Self::Props) -> RenderingTree {
-        Me1::render(Me1Props {})
+        Me1::render(Me1Props {
+            on_button_click: self.event_handler(MeEvent::OnClick),
+            value: self.x,
+        })
     }
 
-    fn update(&mut self, event: Self::Event) {
+    fn update(&mut self, event: &Self::Event) {
         match event {
-            MeEvent::OnClick => println!("Clicked!"),
+            MeEvent::OnClick => {
+                self.x += 1;
+                println!("Clicked!");
+            }
         }
     }
 }
@@ -77,8 +83,8 @@ impl InternalComponent for Me {
         Component::render(self, props.downcast_ref::<MeProps>().unwrap())
     }
 
-    fn update(&mut self, event: Box<dyn Any>) {
-        Component::update(self, *event.downcast::<MeEvent>().unwrap())
+    fn update(&mut self, event: &dyn Any) {
+        Component::update(self, event.downcast_ref::<MeEvent>().unwrap())
     }
 
     fn component_type_id(&self) -> std::any::TypeId {
